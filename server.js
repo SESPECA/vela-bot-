@@ -60,7 +60,7 @@ async function getConversationMessages(conversationId) {
     .sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
 }
 
-async function sendSms(conversationId, text) {
+async function sendSms(conversationId, contactId, text) {
   const res = await fetch(
     `https://services.leadconnectorhq.com/conversations/messages`,
     {
@@ -73,6 +73,7 @@ async function sendSms(conversationId, text) {
       body: JSON.stringify({
         type: 'SMS',
         conversationId,
+        contactId,
         message: text,
       }),
     }
@@ -153,7 +154,7 @@ app.post('/webhook/inbound', async (req, res) => {
     const reply = await getVelaReply(history);
 
     // Send via GHL
-    await sendSms(convId, reply);
+    await sendSms(convId, contactId, reply);
 
     console.log(`[${new Date().toISOString()}] ${contactId} → replied`);
   } catch (err) {
