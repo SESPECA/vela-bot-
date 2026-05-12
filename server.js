@@ -106,6 +106,13 @@ async function getVelaReply(messages) {
     }
   }
 
+  // Claude requires last message to be 'user' — if conversation ends with assistant, bail
+  if (merged[merged.length - 1].role === 'assistant') {
+    throw new Error('Conversation ends with assistant — no new user message to respond to');
+  }
+
+  console.log(`[Claude] sending ${merged.length} messages, last role: ${merged[merged.length-1].role}`);
+
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 150,
@@ -143,22 +150,28 @@ app.post('/webhook/inbound', async (req, res) => {
     // Fetch full conversation history
     const history = await getConversationMessages(convId);
 
-    // Safety: don't reply if last message was already outbound (avoid double-send)
+    // Safety: don't reply if last GHL message is already outbound (we already responded)
     if (history.length > 0 && history[history.length - 1].direction === 'outbound') {
       const lastOutbound = history[history.length - 1];
       const timeSince = Date.now() - new Date(lastOutbound.dateAdded ?? 0).getTime();
-      if (timeSince < 5000) return; // sent less than 5s ago
+      if (timeSince < 30000) {
+        console.log(`[${new Date().toISOString()}] ${contactId} → skipped (last msg outbound ${Math.round(timeSince/1000)}s ago)`);
+        return;
+      }
     }
 
     // Get Claude's reply
     const reply = await getVelaReply(history);
 
     // Send via GHL
-    await sendSms(convId, contactId, reply);
-
-    console.log(`[${new Date().toISOString()}] ${contactId} → replied`);
+    const sendResult = await sendSms(convId, contactId, reply);
+    if (sendResult.messageId) {
+      console.log(`[${new Date().toISOString()}] ${contactId} → replied: ${reply.slice(0,80)}`);
+    } else {
+      console.error(`[${new Date().toISOString()}] ${contactId} → send failed:`, JSON.stringify(sendResult));
+    }
   } catch (err) {
-    console.error('Webhook error:', err.message);
+    console.error(`[${new Date().toISOString()}] Webhook error:`, err.message, err.stack?.split('\n')[1] ?? '');
   }
 });
 
