@@ -56,8 +56,8 @@ async function getConversationMessages(conversationId) {
   // GHL returns { messages: { messages: [...] } } or { messages: [...] }
   const msgs = data?.messages?.messages ?? data?.messages ?? [];
   return msgs
-    .filter(m => m.body && m.messageType === 'SMS')
-    .sort((a, b) => a.dateAdded - b.dateAdded);
+    .filter(m => m.body && (m.messageType === 'SMS' || m.messageType === 'TYPE_SMS'))
+    .sort((a, b) => new Date(a.dateAdded) - new Date(b.dateAdded));
 }
 
 async function sendSms(conversationId, text) {
@@ -145,7 +145,7 @@ app.post('/webhook/inbound', async (req, res) => {
     // Safety: don't reply if last message was already outbound (avoid double-send)
     if (history.length > 0 && history[history.length - 1].direction === 'outbound') {
       const lastOutbound = history[history.length - 1];
-      const timeSince = Date.now() - (lastOutbound.dateAdded ?? 0);
+      const timeSince = Date.now() - new Date(lastOutbound.dateAdded ?? 0).getTime();
       if (timeSince < 5000) return; // sent less than 5s ago
     }
 
