@@ -164,4 +164,23 @@ app.post('/webhook/inbound', async (req, res) => {
 // Health check
 app.get('/', (req, res) => res.json({ status: 'Vela is running', ts: new Date().toISOString() }));
 
+// Debug endpoint — tests Claude + GHL connectivity
+app.get('/debug', async (req, res) => {
+  const results = { anthropic: null, ghl: null, env: {} };
+  results.env = {
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? 'SET (' + process.env.ANTHROPIC_API_KEY.slice(0,10) + '...)' : 'MISSING',
+    GHL_API_KEY: process.env.GHL_API_KEY ? 'SET' : 'MISSING',
+    GHL_LOCATION_ID: process.env.GHL_LOCATION_ID || 'MISSING',
+  };
+  try {
+    const r = await anthropic.messages.create({ model: 'claude-haiku-4-5-20251001', max_tokens: 10, messages: [{ role: 'user', content: 'say ok' }] });
+    results.anthropic = 'OK: ' + r.content[0].text;
+  } catch (e) { results.anthropic = 'ERROR: ' + e.message; }
+  try {
+    const r = await fetch(`https://services.leadconnectorhq.com/locations/${process.env.GHL_LOCATION_ID}`, { headers: { Authorization: `Bearer ${process.env.GHL_API_KEY}`, Version: '2021-07-28' } });
+    results.ghl = 'HTTP ' + r.status;
+  } catch (e) { results.ghl = 'ERROR: ' + e.message; }
+  res.json(results);
+});
+
 app.listen(PORT, () => console.log(`Vela bot listening on port ${PORT}`));
